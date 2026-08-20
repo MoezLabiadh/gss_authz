@@ -1,0 +1,165 @@
+# =============================================================================
+# EUGW Low Volume Threshold Analysis - configuration
+# =============================================================================
+# All tunable parameters live here. No thresholds or rules should be hard-coded
+# in the scripts. If a client decision changes, it should be changeable here.
+# -----------------------------------------------------------------------------
+
+project:
+  name: "EUGW Low Volume Threshold Analysis"
+  crs: 3005                      # BC Albers - all spatial work in this CRS
+  source_crs: 4326               # Well coordinates in the client spreadsheet
+
+paths:
+  # --- inputs -------------------------------------------------------------
+  applications_xlsx: "data/raw/EUGW Volumes_In Progress Low Volume.xlsx"
+  applications_sheet: "EUGW Low Volume"
+  applications_header_row: 1     # 0-indexed; row 0 is a title/merged banner
+  sensitive_sheet: "Aquifers Overlapping Sensitive "   # NOTE trailing space
+  # --- cache / working ----------------------------------------------------
+  bcgw_cache: "data/interim/bcgw_cache.gpkg"
+  interim_dir: "data/interim"
+  output_dir: "data/outputs"
+
+# -----------------------------------------------------------------------------
+# BCGW extraction
+# -----------------------------------------------------------------------------
+# !! VERIFY every object and field name below against the BC Data Catalogue or
+# !! iMapBC before the first production run. Object names change and at least
+# !! one commonly-cited name (WLS_STREAM_RESTRICTIONS_SP) no longer exists.
+bcgw:
+  dsn: "bcgw.bcgov:1521/idwprod1.bcgov"
+  batch_size: 900                # Oracle IN-list limit is 1000; leave headroom
+
+  parcels:
+    table: "WHSE_CADASTRE.PMBC_PARCEL_FABRIC_POLY_SVW"
+    pid_field: "PID"             # 9-char zero-padded string, no hyphens
+    geom_field: "SHAPE"
+
+  aquifers:
+    table: "WHSE_WATER_MANAGEMENT.GW_AQUIFERS_CLASSIFICATION_SVW"
+    id_field: "AQUIFER_ID"
+    geom_field: "GEOMETRY"
+    # MATERIAL and SUBTYPE describe what each aquifer is made of. They are
+    # reported alongside the candidate aquifers but do NOT decide anything -
+    # see aquifer_assignment.undetermined_aquifer.
+    material_field: "MATERIAL"
+    subtype_field: "SUBTYPE"
+    name_field: "NAME"
+
+  aquifer_notations:
+    table: "WHSE_WATER_MANAGEMENT.WLS_WATER_NOTATION_AQUIFERS_SP"
+    # Notation codes treated as "fully recorded". FR-EXC is usually an
+    # exception for domestic use, which does not help non-domestic EUGW
+    # applicants, so it is included.
+    #
+    # CLIENT CONFIRMED 2026-08: FR-EXC needs no further consideration here. No
+    # application in this population sits on any of the nine FR-EXC aquifers
+    # (143, 144, 145, 146, 259, 314, 316, 423, 935), so the setting is inert
+    # either way. It is left in as the conservative reading; re-check on any
+    # data refresh, because that is what makes it inert.
+    #
+    # Codes are embedded in NOTATION_DESCRIPTION free text, e.g.
+    #   "143 - FR-EXC - 2023/10/10"      "111 - FR - 2022/11/21"
+    # and are matched as whole " - "-delimited segments, so listing "FR" here
+    # does NOT also select FR-EXC. Remove FR-EXC to drop it.
+    fully_recorded_codes: ["FR", "FR-EXC"]
+
+  water_reserves:
+    table: "WHSE_WATER_MANAGEMENT.WLS_WATER_RESERVES_AQUIFERS_SP"
+    # Aquifer number is embedded in free text, e.g.
+    #   "OIC 0347/2024 - Aquifer 203 - 2024/06/17"
+    desc_field: "WATER_RESOURCE_MGMT_DESC"
+    aquifer_regex: "Aquifer\\s+(\\d+)"
+    active_only: true            # OIC_INACTIVE_IND blank == active
+
+  temp_protection_orders:
+    table: "WHSE_WATER_MANAGEMENT.WLS_TEMP_PROT_ORDER_SV"
+    geom_field: "SHAPE"          # NOT GEOMETRY - differs from the aquifer layer
+
+# -----------------------------------------------------------------------------
+# Data cleaning
+# -----------------------------------------------------------------------------
+cleaning:
+  # BC bounding box used to validate well coordinates (WGS84)
+  bc_bbox: {min_lat: 48.0, max_lat: 60.1, min_lon: -139.1, max_lon: -114.0}
+  # ~40% of longitudes in the source are positive (sign dropped on export).
+  # Flip to negative where doing so puts the point inside BC.
+  fix_longitude_sign: true
+  # Coordinates with no decimal component (e.g. lat 48, lon -123) are
+  # truncated placeholders, not real locations. Excluded from spatial work.
+  flag_integer_coordinates: true
+
+# -----------------------------------------------------------------------------
+# Aquifer assignment
+# -----------------------------------------------------------------------------
+aquifer_assignment:
+  # CLIENT RULE, non-negotiable (2026-08): the PID is the primary location.
+  # The well coordinate is used only where the PID cannot answer the question:
+  #
+  #   1. the application has no usable PID           -> well decides
+  #   2. the parcel overlaps more than one aquifer   -> well decides which
+  #   3. otherwise                                   -> parcel decides
+  #
+  # Case 2 is the point of running both passes: a parcel straddling a boundary
+  # cannot say which aquifer the water comes from, and the well can. Where the
+  # parcel is ambiguous and no usable well exists, every parcel aquifer is
+  # kept - the application stays ambiguous rather than being resolved by guess.
+  #
+  # Both passes are still computed and written in full; the `assigned` column
+  # marks the rows this rule selects. Nothing is discarded, so the rule can
+  # change without re-running the spatial work.
+  primary_method: "parcel"       # parcel | well
+  # Minimum share of parcel area in an aquifer for the overlap to count.
+  # 0.0 = any intersection at all (conservative default).
+  min_parcel_overlap: 0.0
+
+  # Undetermined aquifer. Where more than one aquifer is assigned, the mapping
+  # cannot say which one a well draws from, so the aquifer-level criteria
+  # cannot be evaluated against "the" aquifer.
+  #
+  # Material is NOT the test. An earlier version flagged only sand and gravel
+  # lying over bedrock, but four confined sand and gravel aquifers can be
+  # layered at one location just as genuinely (see application 100219357), and
+  # a parcel spanning two neighbouring aquifers is equally undetermined.
+  #
+  # CLIENT DIRECTION 2026-08: do not pass or fail an application whose aquifer
+  # is undetermined AND whose candidate aquifers give different answers. Where
+  # every candidate gives the same answer the result stands - knowing which
+  # aquifer is correct would not change it, and sending it for well review
+  # would be wasted effort.
+  undetermined_aquifer:
+    status_label: "further_assessment_needed"
+    # disagreeing - status applies only where the candidates differ on the
+    #               outcome. Every application with more than one aquifer is
+    #               still flagged in `aquifer_undetermined` either way.
+    # any         - status applies to every application with more than one
+    #               aquifer, including those whose candidates all agree.
+    scope: "disagreeing"
+
+# -----------------------------------------------------------------------------
+# Criteria
+# -----------------------------------------------------------------------------
+criteria:
+  # Rule for collapsing multi-aquifer applications to a single verdict.
+  # "any"  - application fails if ANY associated aquifer is restricted
+  # "all"  - application fails only if ALL associated aquifers are restricted
+  collapse_rule: "any"
+
+  # CLIENT CONFIRMED 2026-08: apply to any watershed that has EXPERIENCED a
+  # temporary protection order, not only those currently in effect.
+  tpo_scope: "ever"              # ever | current
+
+  # Criteria judged on the application rather than on the aquifer. These stay
+  # decisive where the aquifer is undetermined - the watershed does not change
+  # depending on which aquifer the well draws from.
+  application_level:
+    - "tpo_watershed"
+
+  # Criteria with no available data source. Carried as columns valued
+  # "not_assessed" so the gap is visible in the deliverable rather than silent.
+  not_assessable:
+    - "wsa_s86_s87_order"        # no order has ever been issued under either
+    - "wsa_s82_agricultural"     # no spatial source identified
+    - "waterworks_serviced"      # licence data has no service areas
+    - "storage_condition"        # depends on applicant works, not mappable

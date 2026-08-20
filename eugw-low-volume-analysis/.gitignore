@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Data. The client spreadsheet and every artefact derived from it stay out of
+# git: they carry applicant information, the caches are large, and steps 00-04
+# regenerate all of it. Directory structure is kept via .gitkeep.
+data/raw/*
+data/interim/*
+data/outputs/*
+!data/**/.gitkeep
+
+# Credentials - BCGW_USER / BCGW_PASSWORD come from the environment
+.env
+
+# OS / editor
+.DS_Store
+Thumbs.db

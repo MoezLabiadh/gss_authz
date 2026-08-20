@@ -1,0 +1,7 @@
+quantity_units,factor_to_m3yr,quantifiable,conversion_method,instantaneous_rate
+m3/year,1.0,True,annual_volume_as_licensed,False
+m3/day,365.0,True,daily_x365_assumes_yearround_authorization,False
+m3/sec,31536000.0,True,instantaneous_rate_annualized_assumes_continuous,True
+Total Flow,,False,total_flow_unquantifiable_entire_source_authorized,False
+Select,,False,invalid_unit_exception,False
+Hectares,,False,invalid_unit_exception,False

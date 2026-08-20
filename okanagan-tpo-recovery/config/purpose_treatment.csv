@@ -1,0 +1,13 @@
+purpose_use_code,treatment,note
+03A,irrigation,Irrigation: Local Provider - client monthly split
+03B,irrigation,Irrigation: Private - client monthly split
+08A,storage,"Stream Storage: Non-Power - excluded from totals, listed separately"
+08B,storage,"Aquifer Storage: NP - excluded from totals, listed separately"
+11A,storage,Conservation: Storage - excluded from totals; contains extreme m3/sec data anomalies
+12A,storage,"Stream Storage: Power - excluded from totals, listed separately"
+07A,flat,Power: Residential - rate-licensed (m3/sec); annualized; client may wish to re-bin
+07B,flat,Power: Commercial - rate-licensed (m3/sec); annualized; client may wish to re-bin
+07C,flat,Power: General - rate-licensed (m3/sec); annualized; client may wish to re-bin
+02F,flat,Lawn Fairway & Garden - stays flat per documented default (not irrigation split)
+02I42,flat,Lawn Fairway & Garden Res - stays flat per documented default
+WSA11,flat,Lawn Fairway & Garden (WSA) - stays flat per documented default

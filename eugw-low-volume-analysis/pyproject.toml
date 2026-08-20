@@ -1,0 +1,21 @@
+[project]
+name = "eugw-low-volume-analysis"
+version = "0.1.0"
+description = "EUGW Low Volume Threshold Analysis - aquifer screening pipeline"
+requires-python = ">=3.12"
+
+dependencies = [
+    # Pinned below 3.0: the scripts were written against the 2.x API and 3.0
+    # both makes to_excel's sheet_name keyword-only and switches the default
+    # string dtype, which changes .astype(str) on PIDs and aquifer IDs.
+    "pandas>=2.2,<3",
+    "geopandas>=1.0",       # pulls pyogrio, used for the GPKG cache and outputs
+    "shapely>=2.0",         # WKB round-trip on BCGW geometry
+    "pyyaml>=6.0",          # config.yaml
+    "openpyxl>=3.1",        # read the client .xlsx, write the deliverable
+    "oracledb>=2.4",        # BCGW, thin mode - no Oracle client install needed
+]
+
+# The numbered scripts are run directly, not imported. Nothing to build.
+[tool.uv]
+package = false

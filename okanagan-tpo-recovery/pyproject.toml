@@ -1,0 +1,16 @@
+[project]
+name = "okanagan-tpo-pipeline"
+version = "0.1.0"
+description = "Okanagan TPO screening pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "geopandas>=1.0",
+    "openpyxl>=3.1",
+    "oracledb>=2.0",   # primary extraction path (--oracle)
+    "bcdata>=0.16",    # credential-free WFS fallback (--bcdata)
+]
+
+[tool.uv]
+# the pipeline is run as a script from this directory, not installed
+package = false
